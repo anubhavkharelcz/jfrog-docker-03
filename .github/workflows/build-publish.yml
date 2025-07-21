@@ -11,7 +11,7 @@ jobs:
     
     steps:
     - name: Checkout code
-      uses: actions/checkout@v2
+      uses: actions/checkout@v4
       
     - name: Setup JFrog CLI
       uses: jfrog/setup-jfrog-cli@v4
@@ -26,20 +26,20 @@ jobs:
         jf docker build -t $IMAGE_NAME .
         
     - name: Run Trivy vulnerability scanner
-      uses: aquasecurity/trivy-action@master
+      uses: aquasecurity/trivy-action@0.30.0
       with:
         image-ref: onezptest.jfrog.io/docker-demo-02-docker/jfrog-docker-example-image:${{ github.run_number }}
         format: 'sarif'
         output: 'trivy-results.sarif'
         
     - name: Upload Trivy scan results to GitHub Security tab
-      uses: github/codeql-action/upload-sarif@v2
+      uses: github/codeql-action/upload-sarif@v3
       if: always()
       with:
         sarif_file: 'trivy-results.sarif'
         
     - name: Run Trivy scanner for critical vulnerabilities
-      uses: aquasecurity/trivy-action@master
+      uses: aquasecurity/trivy-action@0.30.0
       with:
         image-ref: onezptest.jfrog.io/docker-demo-02-docker/jfrog-docker-example-image:${{ github.run_number }}
         format: 'table'
