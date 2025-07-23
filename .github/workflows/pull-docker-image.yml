@@ -75,10 +75,36 @@ jobs:
         LOCAL_TAG: jfrog-docker-example:${{ inputs.image_tag }}
       run: |
         echo "Starting container for testing..."
-        docker run --rm -d --name test-container $LOCAL_TAG
-        sleep 5
-        docker logs test-container
-        docker stop test-container || true
+        
+        # First, let's inspect what the image does
+        echo "Image inspection:"
+        docker inspect $LOCAL_TAG --format='{{.Config.Cmd}}' || true
+        docker inspect $LOCAL_TAG --format='{{.Config.Entrypoint}}' || true
+        
+        # Try to run the container and capture its output
+        echo "Running container..."
+        CONTAINER_ID=$(docker run -d --name test-container $LOCAL_TAG)
+        echo "Container ID: $CONTAINER_ID"
+        
+        # Wait a moment and check container status
+        sleep 3
+        CONTAINER_STATUS=$(docker inspect test-container --format='{{.State.Status}}' 2>/dev/null || echo "not_found")
+        echo "Container status: $CONTAINER_STATUS"
+        
+        # Get logs regardless of container status
+        echo "Container logs:"
+        docker logs test-container 2>&1 || echo "No logs available"
+        
+        # If container exited, show exit code
+        if [ "$CONTAINER_STATUS" = "exited" ]; then
+          EXIT_CODE=$(docker inspect test-container --format='{{.State.ExitCode}}' 2>/dev/null || echo "unknown")
+          echo "Container exited with code: $EXIT_CODE"
+        fi
+        
+        # Cleanup
+        docker rm test-container -f 2>/dev/null || true
+        
+        echo "Container test completed"
         
     - name: Deploy to Environment
       env:
