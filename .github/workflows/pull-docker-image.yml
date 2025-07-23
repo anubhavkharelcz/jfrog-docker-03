@@ -1,0 +1,115 @@
+name: Pull Docker Image from JFrog Artifactory
+
+permissions:
+  contents: read
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: 'Docker image tag/build number to pull'
+        required: true
+        default: 'latest'
+        type: string
+      deploy_environment:
+        description: 'Environment to deploy to'
+        required: false
+        default: 'development'
+        type: choice
+        options:
+        - development
+        - staging
+        - production
+
+jobs:
+  pull-and-deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup JFrog CLI
+      uses: jfrog/setup-jfrog-cli@v4
+      env:
+        JF_URL: ${{ vars.JF_URL }}
+        JF_ACCESS_TOKEN: ${{ secrets.JF_ACCESS_TOKEN }}
+        
+    - name: Authenticate Docker with JFrog
+      run: |
+        jf docker login
+        
+    - name: Pull Docker Image
+      env:
+        IMAGE_NAME: onezptest.jfrog.io/docker-demo-02-docker/jfrog-docker-example-image:${{ inputs.image_tag }}
+      run: |
+        echo "Pulling Docker image: $IMAGE_NAME"
+        jf docker pull $IMAGE_NAME
+        
+    - name: Verify Image
+      env:
+        IMAGE_NAME: onezptest.jfrog.io/docker-demo-02-docker/jfrog-docker-example-image:${{ inputs.image_tag }}
+      run: |
+        echo "Verifying pulled image..."
+        docker images | grep jfrog-docker-example-image
+        docker inspect $IMAGE_NAME
+        
+    - name: Run Security Scan on Pulled Image (Optional)
+      uses: aquasecurity/trivy-action@0.30.0
+      with:
+        image-ref: onezptest.jfrog.io/docker-demo-02-docker/jfrog-docker-example-image:${{ inputs.image_tag }}
+        format: 'table'
+        severity: 'CRITICAL,HIGH'
+        exit-code: '0'
+        
+    - name: Tag Image for Local Use
+      env:
+        SOURCE_IMAGE: onezptest.jfrog.io/docker-demo-02-docker/jfrog-docker-example-image:${{ inputs.image_tag }}
+        LOCAL_TAG: jfrog-docker-example:${{ inputs.image_tag }}
+      run: |
+        docker tag $SOURCE_IMAGE $LOCAL_TAG
+        echo "Tagged image as: $LOCAL_TAG"
+        
+    - name: Run Container (Example)
+      env:
+        LOCAL_TAG: jfrog-docker-example:${{ inputs.image_tag }}
+      run: |
+        echo "Starting container for testing..."
+        docker run --rm -d --name test-container $LOCAL_TAG
+        sleep 5
+        docker logs test-container
+        docker stop test-container || true
+        
+    - name: Deploy to Environment
+      env:
+        IMAGE_NAME: onezptest.jfrog.io/docker-demo-02-docker/jfrog-docker-example-image:${{ inputs.image_tag }}
+        ENVIRONMENT: ${{ inputs.deploy_environment }}
+      run: |
+        echo "Deploying to $ENVIRONMENT environment..."
+        # Add your deployment commands here
+        # Examples:
+        # - Update Kubernetes deployment
+        # - Deploy to Docker Swarm
+        # - Update docker-compose files
+        # - Deploy to cloud services (AWS ECS, Azure Container Instances, etc.)
+        
+        case $ENVIRONMENT in
+          "development")
+            echo "Deploying to development environment..."
+            # kubectl set image deployment/myapp container=$IMAGE_NAME -n development
+            ;;
+          "staging")
+            echo "Deploying to staging environment..."
+            # kubectl set image deployment/myapp container=$IMAGE_NAME -n staging
+            ;;
+          "production")
+            echo "Deploying to production environment..."
+            # kubectl set image deployment/myapp container=$IMAGE_NAME -n production
+            ;;
+        esac
+        
+    - name: Cleanup
+      if: always()
+      run: |
+        echo "Cleaning up local images..."
+        docker system prune -f
